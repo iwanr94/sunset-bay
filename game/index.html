@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunset Bay — Open-World Crime Game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1024; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .panel { background: rgba(12, 8, 20, 0.62); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px; padding: 8px 12px; backdrop-filter: blur(2px); }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #hud.on { display: block; }
+  #hud-topleft { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 6px; }
+  #health-wrap { width: 220px; height: 16px; background: rgba(0,0,0,0.55); border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.25); }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #a5e34a); transition: width 0.15s; }
+  #cash { font-size: 20px; font-weight: 700; color: #7dff9a; text-shadow: 0 1px 3px #000; }
+  #stars { position: absolute; top: 12px; right: 14px; font-size: 30px; letter-spacing: 4px; color: #ffd23a; text-shadow: 0 0 8px rgba(255, 180, 40, 0.7), 0 1px 3px #000; }
+  #stars .off { color: rgba(255,255,255,0.25); text-shadow: none; }
+  #objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: 46%; text-align: center; font-size: 15px; font-weight: 600; text-shadow: 0 1px 3px #000; }
+  #objective small { display: block; font-weight: 400; opacity: 0.85; font-size: 12px; }
+  #toast { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); font-size: 17px; font-weight: 700; color: #ffd23a; text-shadow: 0 1px 4px #000; opacity: 0; transition: opacity 0.25s; }
+  #minimap { position: absolute; left: 12px; bottom: 12px; border: 2px solid rgba(255,255,255,0.35); border-radius: 8px; background: #20242e; }
+  #speed { position: absolute; right: 14px; bottom: 12px; font-size: 26px; font-weight: 800; text-shadow: 0 1px 4px #000; }
+  #speed small { font-size: 13px; font-weight: 400; opacity: 0.8; }
+  #hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: 0.75; text-shadow: 0 1px 3px #000; }
+  .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 120%, rgba(255, 120, 50, 0.35), rgba(10, 6, 20, 0.82) 70%); z-index: 10; }
+  .screen.hidden { display: none; }
+  .card { max-width: 560px; margin: 16px; padding: 28px 32px; text-align: center; background: rgba(14, 9, 24, 0.78); border: 1px solid rgba(255, 170, 80, 0.35); border-radius: 16px; }
+  .card h1 { margin: 0 0 4px; font-size: 52px; letter-spacing: 6px; color: #ffb347; text-shadow: 0 0 24px rgba(255, 140, 40, 0.55); }
+  .card h2 { margin: 0 0 14px; font-size: 15px; font-weight: 400; color: #ffd9a0; letter-spacing: 2px; text-transform: uppercase; }
+  .card p { font-size: 14px; line-height: 1.55; color: #e8e2f2; }
+  .card .controls { font-size: 13px; line-height: 1.8; color: #c9c2d8; text-align: left; display: inline-block; margin: 8px 0 16px; }
+  .card .controls b { color: #fff; }
+  button { pointer-events: auto; cursor: pointer; font-size: 16px; font-weight: 700; color: #1a1024; background: linear-gradient(180deg, #ffd23a, #ff9a3c); border: none; border-radius: 10px; padding: 12px 26px; margin: 4px; }
+  button.secondary { background: rgba(255,255,255,0.16); color: #fff; border: 1px solid rgba(255,255,255,0.35); }
+  .fine { font-size: 11px; color: #9a93ad; margin-top: 14px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Sunset Bay: an open-world crime game. Drive, steal cars, outrun the police and run missions."></canvas>
+<div id="hud">
+  <div id="hud-topleft">
+    <div id="health-wrap"><div id="health-fill"></div></div>
+    <div id="cash">$150</div>
+  </div>
+  <div id="stars"></div>
+  <div id="objective" class="panel"><span id="objective-text"></span><small id="objective-sub"></small></div>
+  <div id="toast"></div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="speed">0 <small>mph</small></div>
+  <div id="hint">WASD move / drive &nbsp;·&nbsp; E enter car &nbsp;·&nbsp; F punch &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; Esc pause &nbsp;·&nbsp; M mute</div>
+</div>
+
+<div id="screen-title" class="screen">
+  <div class="card">
+    <h1>SUNSET BAY</h1>
+    <h2>An open-world crime game</h2>
+    <p>Rico needs a driver, the sun is going down over the bay, and the whole city is
+    yours to take. Steal cars, dodge the Sunset Bay PD, and run five jobs from the pier
+    to the north docks — then keep the city for yourself.</p>
+    <div class="controls">
+      <b>W A S D</b> — move / drive &nbsp;&nbsp; <b>Shift</b> — run<br>
+      <b>E</b> — steal / exit car &nbsp;&nbsp; <b>F</b> or click — punch<br>
+      <b>Mouse drag</b> — look around &nbsp;&nbsp; <b>Esc</b> — pause &nbsp;&nbsp; <b>M</b> — mute
+    </div><br>
+    <button id="btn-start">Start new game</button>
+    <button id="btn-continue" class="secondary">Continue</button>
+    <p class="fine">An original game: its own city, characters and story. Not affiliated with Rockstar Games.</p>
+  </div>
+</div>
+
+<div id="screen-pause" class="screen hidden">
+  <div class="card">
+    <h1 style="font-size:34px">PAUSED</h1>
+    <p>Sunset Bay waits for no one — except right now.</p>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-quit" class="secondary">Save &amp; quit to title</button>
+  </div>
+</div>
+
+<div id="screen-busted" class="screen hidden">
+  <div class="card">
+    <h1 style="font-size:34px">BUSTED</h1>
+    <p>The Sunset Bay PD caught up with you. Fine: $100. Your car is impounded.</p>
+    <button id="btn-busted">Back on the streets</button>
+  </div>
+</div>
+
+<div id="screen-over" class="screen hidden">
+  <div class="card">
+    <h1 style="font-size:34px">FLATLINED</h1>
+    <p>You woke up at St. Marina Hospital, $50 lighter. The city is still out there.</p>
+    <button id="btn-respawn">Leave the hospital</button>
+  </div>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
